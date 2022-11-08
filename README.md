@@ -20,3 +20,13 @@ async fn greet(name: web::Path<String>) -> impl Responder {
     format!("Hello {name}!")
 }
 ```
+
+## 3. Debug
+
+```bash
+# start server (require cargo-watch)
+make start
+
+# test server (require httpie)
+make test
+```

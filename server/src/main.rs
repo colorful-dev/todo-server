@@ -1,7 +1,16 @@
-use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{
+    get, post,
+    web::{self, Data},
+    App, HttpResponse, HttpServer, Responder,
+};
 use serde::Serialize;
 
-#[derive(Serialize)]
+#[derive(Clone)]
+struct AppData {
+    todos: Vec<Todo>,
+}
+
+#[derive(Serialize, Clone)]
 struct Todo {
     id: u32,
     title: String,
@@ -9,24 +18,21 @@ struct Todo {
 }
 
 #[get("/")]
-async fn index() -> impl Responder {
-    let obj = Todo {
-        id: 1,
-        title: "1".to_string(),
-        completed: false,
-    };
-    HttpResponse::Ok().json(web::Json(obj))
-}
-
-#[post("/echo")]
-async fn echo(req_body: String) -> impl Responder {
-    HttpResponse::Ok().body(req_body)
+async fn index(todos: Data<Vec<Todo>>) -> impl Responder {
+    HttpResponse::Ok().json(web::Json(todos))
 }
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    HttpServer::new(|| App::new().service(index).service(echo))
-        .bind(("127.0.0.1", 8080))?
-        .run()
-        .await
+    let app_data = AppData {
+        todos: vec![] as Vec<Todo>,
+    };
+    HttpServer::new(move || {
+        App::new()
+            .app_data(Data::new(app_data.todos.clone()))
+            .service(index)
+    })
+    .bind(("127.0.0.1", 8080))?
+    .run()
+    .await
 }
