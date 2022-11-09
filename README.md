@@ -25,14 +25,16 @@ async fn greet(name: web::Path<String>) -> impl Responder {
 
 ### need install deps
 
-docker
-docker-compose
-postgres (in lib/postgres)
+docker  
+docker-compose  
+postgres (in lib/postgres)  
 
 ```bash
 cargo install diesel_cli --no-default-features --features "postgres"
 cargo install cargo-watch
 brew install httpie
+# in this workspace
+diesel migration run
 ```
 
 ### after install deps
