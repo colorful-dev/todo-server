@@ -3,25 +3,20 @@ use actix_web::{
     web::{self, Data},
     App, HttpResponse, HttpServer, Responder,
 };
-use serde::{Deserialize, Serialize};
-use std::sync::{Mutex, MutexGuard};
+use diesel::{RunQueryDsl, QueryDsl};
+use diesel::prelude::*;
 
-struct AppData {
-    current_id: Mutex<i32>,
-    todos: Mutex<Vec<Todo>>,
-}
+use serde::Deserialize;
 
-#[derive(Serialize, Clone)]
-struct Todo {
-    id: i32,
-    title: String,
-    completed: bool,
-}
+mod models;
+use models::todo::*;
 
-#[derive(Deserialize)]
-struct AddTodo {
-    title: String,
-}
+mod db;
+
+mod schema;
+// use schema::todos::*;
+
+// use uuid::Uuid;
 
 #[derive(Deserialize)]
 struct UpdateParams {
@@ -37,75 +32,62 @@ struct UpdateTodo {
 }
 
 #[get("/")]
-async fn index(data: Data<AppData>) -> impl Responder {
-    HttpResponse::Ok().json(web::Json(&data.todos))
+async fn index(db: web::Data<db::Pool>) -> impl Responder {
+    let mut conn = db.get().unwrap();
+    let result = schema::todos::table
+        .load::<Todo>(&mut conn)
+        .expect("Error loading todos");
+    HttpResponse::Ok().json(web::Json(result))
 }
 
 #[post("/")]
-async fn insert(data: web::Data<AppData>, todo: web::Json<AddTodo>) -> impl Responder {
-    let mut current_id = data.current_id.lock().unwrap();
-    let mut todos = data.todos.lock().unwrap();
-    let todo = Todo {
-        id: current_id.clone(),
+async fn insert(db: web::Data<db::Pool>, todo: web::Json<NewTodo>) -> impl Responder {
+    let mut conn = db.get().unwrap();
+    // let uuid = Uuid::new_v4().to_string();
+    let new_todo = NewTodo {
         title: todo.title.clone(),
-        completed: false,
     };
-    todos.push(todo.clone());
-    *current_id += 1;
+    let todo = diesel::insert_into(schema::todos::dsl::todos)
+        .values(&new_todo)
+        .get_result::<Todo>(&mut conn)
+        .expect("Error saving new todo");
     HttpResponse::Created().json(web::Json(todo))
 }
 
 #[put("/{id}")]
 async fn update(
-    data: web::Data<AppData>,
+    db: web::Data<db::Pool>,
     params: web::Path<UpdateParams>,
     update_data: web::Json<UpdateTodo>,
 ) -> impl Responder {
-    let mut todos = data.todos.lock().unwrap();
+    use schema::todos::dsl::{todos, title, completed};
+    let mut conn = db.get().unwrap();
     let id = params.id;
-    let exist = exist_by_id(id, &todos);
-    match exist {
-        Some(i) => {
-            let todo = todos.get_mut(i).unwrap();
-            let updated_todo = Todo {
-                id: todo.id.clone(),
-                title: update_data.title.clone(),
-                completed: update_data.completed.clone(),
-            };
-            *todo = updated_todo.clone();
-            HttpResponse::Ok().json(web::Json(updated_todo))
-        }
-        _ => HttpResponse::NotFound().finish(),
-    }
+    let todo = diesel::update(todos.find(id))
+        .set((
+            title.eq(update_data.title.to_string()),
+            completed.eq(update_data.completed),
+        ))
+        .get_result::<Todo>(&mut conn)
+        .expect("Error updating todo");
+    HttpResponse::Ok().json(web::Json(todo))
 }
 
 #[delete("/{id}")]
-async fn remove(data: web::Data<AppData>, params: web::Path<UpdateParams>) -> impl Responder {
-    let mut todos = data.todos.lock().unwrap();
+async fn remove(db: web::Data<db::Pool>, params: web::Path<UpdateParams>) -> impl Responder {
+    let mut conn = db.get().unwrap();
     let id = params.id;
-    let exist = exist_by_id(id, &todos);
-    match exist {
-        Some(i) => {
-            todos.remove(i);
-            HttpResponse::Ok().body("Todo deleted")
-        }
-        None => HttpResponse::NotFound().body("Todo not found"),
-    }
+    let num_deleted = diesel::delete(schema::todos::dsl::todos.find(id))
+        .execute(&mut conn)
+        .expect("Error deleting todo");
+    HttpResponse::Ok().json(web::Json(num_deleted))
 }
-
-fn exist_by_id(id: i32, state: &MutexGuard<Vec<Todo>>) -> Option<usize> {
-    state.iter().position(|model| model.id == id)
-}
-
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let app_data = Data::new(AppData {
-        todos: Mutex::new(vec![]) as Mutex<Vec<Todo>>,
-        current_id: Mutex::new(0),
-    });
+    let pool = db::sql_connect();
     HttpServer::new(move || {
         App::new()
-            .app_data(app_data.clone())
+            .app_data(Data::new(pool.clone()))
             .service(index)
             .service(insert)
             .service(update)

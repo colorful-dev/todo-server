@@ -1,0 +1,19 @@
+version: '3'
+
+services:
+  db:
+    image: postgres:15.0-alpine
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: dangerous
+    ports:
+      - "5432:5432"
+
+networks:
+  default:
+      name: dev_env
+volumes:
+  db_data:
+    driver: local

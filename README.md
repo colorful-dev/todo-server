@@ -23,8 +23,22 @@ async fn greet(name: web::Path<String>) -> impl Responder {
 
 ## 3. Debug
 
+### need install deps
+
+docker
+docker-compose
+postgres (in lib/postgres)
+
 ```bash
-# start server (require cargo-watch)
+cargo install diesel_cli --no-default-features --features "postgres"
+cargo install cargo-watch
+brew install httpie
+```
+
+### after install deps
+
+```bash
+# start server (require cargo-watch) 
 make start
 
 # test server (require httpie)

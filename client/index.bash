@@ -5,7 +5,7 @@ all() {
 }
 
 add() {
-    http post localhost:8080/ title="write Rust"
+    http post localhost:8080/ title="new todo2"
 }
 
 update() {
