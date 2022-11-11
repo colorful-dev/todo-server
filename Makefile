@@ -1,0 +1,2 @@
+start:
+	cargo watch
